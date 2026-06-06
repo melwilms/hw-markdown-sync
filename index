@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harper Wilde · Markdown Sync</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🏷️%3C/text%3E%3C/svg%3E">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f4f4; color: #1a1a1a; font-size: 14px; }
+
+.header { background: #1a1a1a; color: white; padding: 18px 40px; display: flex; align-items: center; gap: 10px; }
+.header-brand { font-size: 15px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+.header-sep { color: #555; font-size: 18px; }
+.header-title { font-size: 14px; color: #aaa; letter-spacing: 0.5px; }
+
+.main { max-width: 1280px; margin: 0 auto; padding: 28px 24px; }
+
+.card { background: white; border-radius: 10px; border: 1px solid #e8e8e8; padding: 22px 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+.card-label { font-size: 14px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.2px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+
+.card-locked { opacity: 0.38; pointer-events: none; }
+.card-body { overflow: hidden; max-height: 2000px; transition: max-height 0.35s ease, opacity 0.3s ease; opacity: 1; }
+.card-locked .card-body { max-height: 0; opacity: 0; }
+
+/* Mode selector */
+.mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.mode-card { border: 2px solid #e8e8e8; border-radius: 10px; padding: 18px 20px; cursor: pointer; transition: all 0.18s; display: flex; flex-direction: row; align-items: center; gap: 16px; }
+.mode-card:hover:not(.disabled) { border-color: #aaa; background: #fafafa; }
+.mode-card.selected { border-color: #CFC7C1; background: #CFC7C1; color: #1a1a1a; }
+.mode-card.selected .mode-desc { color: #6b6460; }
+.mode-card.selected .mode-radio { border-color: #1a1a1a; }
+.mode-card.selected .mode-radio-dot { opacity: 1; background: #1a1a1a; }
+.mode-card.disabled { opacity: 0.45; cursor: not-allowed; }
+.mode-radio { flex-shrink: 0; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #ccc; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.mode-radio-dot { width: 7px; height: 7px; border-radius: 50%; background: white; opacity: 0; transition: opacity 0.15s; }
+.mode-content { flex: 1; }
+.mode-icon { font-size: 22px; margin-bottom: 4px; }
+.mode-title { font-size: 15px; font-weight: 700; margin-bottom: 3px; letter-spacing: 0.2px; display: flex; align-items: center; gap: 8px; }
+.mode-badge { background: #fff8e1; color: #b45309; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 8px; letter-spacing: 0.5px; text-transform: uppercase; }
+.mode-desc { font-size: 12px; color: #888; line-height: 1.5; }
+
+/* Upload */
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.upload-section-label { font-size: 12px; font-weight: 600; color: #555; margin-bottom: 8px; }
+.drop-zone { border: 3px dashed #c8c8c8; border-radius: 10px; padding: 36px 24px; text-align: center; cursor: pointer; transition: all 0.18s; user-select: none; }
+.drop-zone:hover { border-color: #888; background: #fafafa; }
+.drop-zone.drag-over { border-color: #1a1a1a; background: #f5f5f5; }
+.drop-zone.loaded { border-color: #4caf50; border-style: solid; background: #f6fdf6; }
+.drop-icon { font-size: 28px; margin-bottom: 8px; }
+.drop-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.drop-sub { font-size: 11px; color: #aaa; }
+.file-tag { background: #e8f5e9; color: #2e7d32; border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: 500; }
+input[type=file] { display: none; }
+
+/* Rules card */
+.rule-section { margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid #f0f0f0; }
+.rule-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.rule-title { font-size: 12px; font-weight: 700; color: #333; margin-bottom: 6px; letter-spacing: 0.2px; text-transform: uppercase; }
+.rule-desc { font-size: 11px; color: #999; margin-bottom: 10px; line-height: 1.5; }
+.threshold-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.threshold-input { width: 60px; border: 1px solid #ddd; border-radius: 5px; padding: 6px 8px; font-size: 13px; text-align: center; font-weight: 600; }
+.threshold-input:focus { outline: none; border-color: #555; }
+.threshold-label { font-size: 12px; color: #555; }
+.tag-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tag-chip { background: #f0f4f8; color: #334155; border: 1px solid #dfe5ec; border-radius: 14px; padding: 4px 10px 4px 12px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; font-family: 'SFMono-Regular', Consolas, monospace; }
+.tag-chip .x { cursor: pointer; color: #94a3b8; font-weight: 400; font-size: 14px; line-height: 1; padding: 0 2px; border-radius: 3px; }
+.tag-chip .x:hover { color: #e53935; background: rgba(229,57,53,0.1); }
+.tag-chip-add { background: white; border: 1px dashed #cbd5e1; color: #94a3b8; padding: 4px 10px; }
+.tag-chip-add input { border: none; outline: none; font-size: 11px; font-weight: 600; font-family: 'SFMono-Regular', Consolas, monospace; background: transparent; width: 130px; color: #1a1a1a; }
+.tag-chip-add input::placeholder { color: #cbd5e1; }
+.suggested-strip { background: #fffbeb; border: 1px solid #fde68a; border-radius: 7px; padding: 12px 14px; }
+.suggested-strip-title { font-size: 11px; font-weight: 700; color: #92400e; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.4px; }
+.strip-checkbox-list { display: flex; flex-direction: column; gap: 5px; }
+.strip-check { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; padding: 3px 0; }
+.strip-check input[type=checkbox] { width: 14px; height: 14px; accent-color: #b45309; cursor: pointer; }
+.strip-check code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; color: #334155; background: #f5f5f5; padding: 2px 6px; border-radius: 3px; }
+.strip-check .count { color: #888; font-size: 10px; margin-left: auto; }
+
+/* Mappings */
+.mapping-toggle { cursor: pointer; }
+.mapping-toggle-icon { transition: transform 0.2s; display: inline-block; }
+.mapping-toggle-icon.closed { transform: rotate(-90deg); }
+.mapping-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+.mapping-table th { font-size: 11px; font-weight: 600; color: #999; text-transform: uppercase; letter-spacing: 0.6px; padding: 6px 10px; background: #fafafa; border-bottom: 1px solid #eee; text-align: left; }
+.mapping-table td { padding: 5px 10px; border-bottom: 1px solid #f5f5f5; }
+.mapping-table input { width: 100%; border: 1px solid #e8e8e8; border-radius: 5px; padding: 5px 8px; font-size: 12px; color: #1a1a1a; transition: border-color 0.15s; }
+.mapping-table input:focus { outline: none; border-color: #555; }
+.btn-remove { background: none; border: none; cursor: pointer; color: #ccc; font-size: 15px; padding: 2px 6px; border-radius: 4px; transition: color 0.15s; }
+.btn-remove:hover { color: #e53935; }
+.btn-add-row { background: none; border: 1px dashed #ccc; border-radius: 6px; padding: 6px 14px; font-size: 12px; color: #888; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all 0.15s; }
+.btn-add-row:hover { border-color: #555; color: #333; }
+.mapping-hint { font-size: 11px; color: #bbb; margin-bottom: 10px; line-height: 1.5; }
+
+/* Run */
+.run-wrap { margin: 6px 0 8px; }
+.run-btn { width: 100%; padding: 15px; border: none; border-radius: 8px; background: #1a1a1a; color: white; font-size: 15px; font-weight: 600; cursor: pointer; letter-spacing: 0.3px; transition: background 0.18s; }
+.run-btn:hover:not(:disabled) { background: #333; }
+.run-btn:disabled { background: #ccc; color: #fff; cursor: not-allowed; }
+
+/* Stats */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.stat-tile { background: white; border: 1px solid #e8e8e8; border-radius: 8px; padding: 14px 12px; text-align: center; cursor: pointer; transition: all 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+.stat-tile:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.08); }
+.stat-tile.active { border-color: #1a1a1a; box-shadow: 0 0 0 2px #1a1a1a; }
+.stat-num { font-size: 24px; font-weight: 700; line-height: 1; }
+.stat-lbl { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 0.6px; margin-top: 4px; }
+.c-green  .stat-num { color: #43a047; }
+.c-teal   .stat-num { color: #00897b; }
+.c-red    .stat-num { color: #e53935; }
+.c-orange .stat-num { color: #fb8c00; }
+.c-yellow .stat-num { color: #f9a825; }
+.c-blue   .stat-num { color: #1e88e5; }
+.c-purple .stat-num { color: #8e24aa; }
+.c-pink   .stat-num { color: #e91e8c; }
+
+/* Filter chips */
+.filter-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.chip { padding: 4px 12px; border-radius: 14px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid #e0e0e0; background: white; color: #777; transition: all 0.15s; white-space: nowrap; }
+.chip:hover { border-color: #999; color: #333; }
+.chip.active { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+
+/* Match breakdown */
+.match-breakdown { font-size: 11px; color: #888; margin-bottom: 14px; padding: 0 2px; min-height: 14px; }
+.match-breakdown strong { color: #555; font-weight: 600; }
+
+/* Preview banner */
+.preview-banner { display: flex; gap: 12px; align-items: flex-start; background: #f0f9ff; border-left: 4px solid #1e88e5; padding: 14px 18px; margin: 16px 0; border-radius: 6px; font-size: 13px; line-height: 1.5; color: #1e3a5f; }
+.preview-banner-icon { font-size: 16px; flex-shrink: 0; line-height: 1.3; }
+.preview-banner em { font-style: italic; color: #0c4a7a; }
+
+/* Table */
+.table-meta { font-size: 11px; color: #aaa; margin-bottom: 8px; }
+.table-wrap { overflow-x: auto; overflow-y: auto; max-height: 560px; border-radius: 6px; border: 1px solid #ebebeb; }
+table.results-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.results-table thead th { position: sticky; top: 0; z-index: 2; background: #f7f7f7; padding: 9px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #888; border-bottom: 2px solid #e8e8e8; white-space: nowrap; }
+.results-table tbody td { padding: 7px 12px; border-bottom: 1px solid #f5f5f5; vertical-align: top; }
+.results-table tbody tr:last-child td { border-bottom: none; }
+.results-table tbody tr:hover { background: #fafafa !important; }
+.results-table tbody tr.r-ok        { background: white; }
+.results-table tbody tr.r-changed   { background: #f0f9ff; }
+.results-table tbody tr.r-missing-s { background: #fff4eb; }
+.results-table tbody tr.r-missing-m { background: #fce4ec; }
+
+/* Badges */
+.b { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; white-space: nowrap; line-height: 1.6; }
+.b-match      { background: #e8f5e9; color: #2e7d32; }
+.b-changed    { background: #e0f2fe; color: #0369a1; }
+.b-missing-s  { background: #fff3e0; color: #e65100; }
+.b-missing-m  { background: #fce4ec; color: #880e4f; }
+.b-finalsale  { background: #fee2e2; color: #991b1b; }
+.b-discount   { background: #fef3c7; color: #92400e; }
+.b-underwear  { background: #ede9fe; color: #6b21a8; }
+
+.sku  { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; color: #555; }
+.detail { font-size: 10px; color: #aaa; margin-top: 1px; }
+.price-old { color: #aaa; text-decoration: line-through; font-size: 11px; margin-right: 4px; }
+.price-new { color: #065f46; font-weight: 600; font-size: 12px; }
+.price-eq  { color: #555; font-size: 12px; }
+.tag-add { color: #065f46; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 10px; }
+.tag-rm  { color: #991b1b; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 10px; text-decoration: line-through; }
+.tag-list { display: flex; flex-direction: column; gap: 1px; max-width: 280px; }
+
+/* Export */
+.export-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.exp-btn { padding: 14px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.18s; text-align: left; border: 2px solid; display: flex; flex-direction: column; gap: 4px; }
+.exp-primary   { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+.exp-primary:hover   { background: #333; border-color: #333; }
+.exp-secondary { background: white; color: #1a1a1a; border-color: #1a1a1a; }
+.exp-secondary:hover { background: #f5f5f5; }
+.exp-sub { font-size: 10px; font-weight: 500; opacity: 0.75; }
+.exp-primary .exp-sub { color: #ddd; }
+.exp-secondary .exp-sub { color: #888; }
+
+.hidden { display: none !important; }
+.empty-msg { text-align: center; padding: 40px; color: #bbb; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-brand">Harper Wilde</span>
+  <span class="header-sep">·</span>
+  <span class="header-title">Markdown Sync</span>
+</div>
+
+<div class="main">
+
+  <!-- Mode -->
+  <div class="card">
+    <div class="card-label">1 — Select Mode</div>
+    <div class="mode-grid">
+      <label class="mode-card" id="modeMarkdowns" for="radioMarkdowns">
+        <input type="radio" id="radioMarkdowns" name="appMode" value="markdowns" onchange="setMode('markdowns')" style="display:none">
+        <div class="mode-radio"><span class="mode-radio-dot"></span></div>
+        <div class="mode-content">
+          <div class="mode-icon">🏷️</div>
+          <div class="mode-title">Markdowns</div>
+          <div class="mode-desc">Update and audit prices &amp; apply tag rules for sale-bound products — outputs sale &amp; revert CSVs</div>
+        </div>
+      </label>
+      <label class="mode-card disabled" id="modeBundles" title="Coming soon">
+        <div class="mode-radio"><span class="mode-radio-dot"></span></div>
+        <div class="mode-content">
+          <div class="mode-icon">🎁</div>
+          <div class="mode-title">Bundles <span class="mode-badge">Soon</span></div>
+          <div class="mode-desc">Bundle pricing &amp; collection metafield sync — coming in a future update</div>
+        </div>
+      </label>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div class="card card-locked" id="uploadCard">
+    <div class="card-label">2 — Upload Files</div>
+    <div class="card-body">
+      <div class="upload-grid">
+        <div>
+          <div class="upload-section-label">Master Pricing</div>
+          <div class="drop-zone" id="masterZone" onclick="document.getElementById('masterInput').click()">
+            <input type="file" id="masterInput" accept=".csv,.xlsx,.xls">
+            <div class="drop-icon">📋</div>
+            <div class="drop-title">Drop master pricing file here</div>
+            <div class="drop-sub">XLSX or CSV — title, sale price, MSRP, department, SKU/UPC</div>
+            <div style="font-size:22px; color:#ccc; margin-top:10px;">⬆</div>
+          </div>
+        </div>
+        <div>
+          <div class="upload-section-label">Shopify Export</div>
+          <div class="drop-zone" id="shopifyZone" onclick="document.getElementById('shopifyInput').click()">
+            <input type="file" id="shopifyInput" accept=".csv,.xlsx,.xls">
+            <div class="drop-icon">🛍️</div>
+            <div class="drop-title">Drop Shopify product export here</div>
+            <div class="drop-sub">CSV or XLSX — variant-level with tags &amp; prices</div>
+            <div style="font-size:22px; color:#ccc; margin-top:10px;">⬆</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tag Rules -->
+  <div class="card card-locked" id="rulesCard">
+    <div class="card-label">3 — Configure Tag Rules</div>
+    <div class="card-body">
+      <p class="mapping-hint">Defaults match the Standard Markdown Tags template. Edit per run — changes apply to this session only.</p>
+
+      <div class="rule-section">
+        <div class="rule-title">Final-sale threshold</div>
+        <div class="rule-desc">Products at or above this discount, OR products with Department = "Underwear" in the master file, get the final-sale tag set.</div>
+        <div class="threshold-row">
+          <input type="number" id="thresholdInput" class="threshold-input" min="0" max="100" step="1" value="50" onchange="rules.threshold = +this.value">
+          <span class="threshold-label">% off — discount threshold</span>
+        </div>
+      </div>
+
+      <div class="rule-section">
+        <div class="rule-title">Add to ≥threshold OR underwear products</div>
+        <div class="rule-desc">These tags are added to products that hit the final-sale rule.</div>
+        <div class="tag-chips" id="ruleFinalSaleChips"></div>
+      </div>
+
+      <div class="rule-section">
+        <div class="rule-title">Add to all products</div>
+        <div class="rule-desc">These tags are added to every product in the run, regardless of discount.</div>
+        <div class="tag-chips" id="ruleAllChips"></div>
+      </div>
+
+      <div class="rule-section">
+        <div class="rule-title">Auto-strip (hard rule)</div>
+        <div class="rule-desc">Always removed from every product — no opt-in needed.</div>
+        <div class="tag-chips" id="ruleAutoStripChips"></div>
+      </div>
+
+      <div class="rule-section" id="suggestedStripSection">
+        <div class="rule-title">Suggested strip — review per run</div>
+        <div class="rule-desc">Lifecycle &amp; merch-bucket tags found on your products. Check any you want removed for this sale.</div>
+        <div class="suggested-strip" id="suggestedStripWrap">
+          <div style="color:#aaa; font-size:11px;">Upload files to populate suggestions.</div>
+        </div>
+      </div>
+
+      <div class="rule-section" id="otherTagsSection">
+        <div class="rule-title">Other tags noticed</div>
+        <div class="rule-desc">Non-structural tags on your products that aren't in the suggested list. Opt in to strip any unexpected ones.</div>
+        <div class="suggested-strip" id="otherTagsWrap" style="background:#f9fafb; border-color:#e5e7eb;">
+          <div style="color:#aaa; font-size:11px;">Upload files to populate.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Name Mappings -->
+  <div class="card card-locked" id="mappingsCard">
+    <div class="card-label">
+      <span class="mapping-toggle" onclick="toggleMappings()">
+        <span class="mapping-toggle-icon closed" id="mappingArrow">▼</span>
+        &nbsp;4 — Name Mappings
+        <span style="font-size:10px; color:#bbb; font-weight:400; text-transform:none; letter-spacing:0; margin-left:6px;">when a product name differs between master and Shopify</span>
+      </span>
+    </div>
+    <div class="card-body">
+      <div id="mappingBody" style="display:none">
+        <p class="mapping-hint">Used when SKU/UPC matching falls through. Maps a master title (e.g. "Pima Tee &amp; Pant Set") to its Shopify title (e.g. "Perfect Pima Pajama Tee &amp; Pants Set").</p>
+        <table class="mapping-table">
+          <thead><tr><th>Master Title</th><th>Shopify Title</th><th></th></tr></thead>
+          <tbody id="mappingRows"></tbody>
+        </table>
+        <button class="btn-add-row" onclick="addMapping()">+ Add mapping</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run -->
+  <div class="run-wrap">
+    <button class="run-btn" id="runBtn" onclick="runAudit()" disabled>
+      Upload both files to preview
+    </button>
+  </div>
+
+  <!-- Results -->
+  <div id="resultsSection" class="hidden">
+    <div class="stats-row" id="statsRow"></div>
+    <div class="filter-row" id="filterRow"></div>
+    <div id="matchBreakdown" class="match-breakdown"></div>
+
+    <div class="card" style="padding: 16px 20px;">
+      <div class="table-meta" id="tableMeta"></div>
+      <div class="table-wrap">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th style="min-width:80px;">Status</th>
+              <th style="min-width:200px;">Product</th>
+              <th style="min-width:90px;">Match</th>
+              <th style="min-width:60px;">Dept</th>
+              <th style="min-width:120px;">Price Change</th>
+              <th style="min-width:90px;">% Off</th>
+              <th style="min-width:80px;">Flags</th>
+              <th style="min-width:280px;">Tag Changes</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="preview-banner">
+      <span class="preview-banner-icon">👁</span>
+      <div>
+        <strong>This is a preview.</strong> Nothing has been written to Shopify yet — the changes above are what <em>will</em> happen when you download the CSVs below and import them through Shopify admin.
+      </div>
+    </div>
+
+    <div class="card" id="exportCard">
+      <div class="card-label">Downloads <span style="font-weight:400; color:#888; font-size:11px; margin-left:6px;">Shopify-importable</span></div>
+      <p class="mapping-hint">Four CSVs — two to go live, two to revert after the sale ends. Only rows that exist in both files and have actual changes are included. Import these through Shopify admin → Products → Import to apply.</p>
+      <div class="export-grid">
+        <button class="exp-btn exp-primary" onclick="downloadPricesSale()">
+          <span>📥 Prices — Sale Live</span>
+          <span class="exp-sub" id="cntPricesSale">Variant-level, updated prices from master</span>
+        </button>
+        <button class="exp-btn exp-primary" onclick="downloadTagsSale()">
+          <span>📥 Tags — Sale Live</span>
+          <span class="exp-sub" id="cntTagsSale">Product-level, rules applied</span>
+        </button>
+        <button class="exp-btn exp-secondary" onclick="downloadPricesRevert()">
+          <span>↩️ Prices — Revert</span>
+          <span class="exp-sub" id="cntPricesRevert">Restores pre-markdown prices</span>
+        </button>
+        <button class="exp-btn exp-secondary" onclick="downloadTagsRevert()">
+          <span>↩️ Tags — Revert</span>
+          <span class="exp-sub" id="cntTagsRevert">Restores pre-markdown tags</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// =====================================================================
+// STATE
+// =====================================================================
+let appMode       = null;
+let masterData    = null;   // raw rows from master XLSX/CSV
+let shopifyData   = null;   // raw rows from Shopify export (variant-level)
+let results       = [];     // per-product audit + transform output
+let activeFilter  = 'all';
+let mappingsOpen  = false;
+
+let rules = {
+  threshold: 50,
+  finalSaleTags: ['final-sale', 'exclude_rebuy', 'bis-hidden'],
+  allProductTags: ['sale-section', 'bis-hidden'],
+  autoStrip: ['bulk:tier-2', 'bulk:tier-3'],
+  suggestedStripKnown: ['checkbox-eligible', 'seasonal-essentials', 'vacation-edit', 'event-shop', 'Q4 Drop 1', 'Q4 Drop 2', 'Q4 Drop 3', 'Q4 Drop 4', 'Q1 Drop 1', 'Q1 Drop 2', 'Q2 Drop 1', 'Q2 Drop 2', 'Q3 Drop 1', 'Q3 Drop 2'],
+  suggestedStripChecked: new Set(),
+  otherTagsChecked: new Set(),
+};
+
+let nameMappings = [];
+
+// Tag prefixes considered "structural" — kept regardless of cleanup rules.
+const STRUCTURAL_PREFIXES = ['breadcrumb1:', 'breadcrumb2:', 'matchback:', 'product:', 'size-guide:', 'size-guide::'];
+
+// Tag set we add — should never be suggested for removal.
+function isAddedTag(t) {
+  const s = new Set([...rules.finalSaleTags, ...rules.allProductTags]);
+  return s.has(t);
+}
+function isStructural(t) { return STRUCTURAL_PREFIXES.some(p => t.startsWith(p)); }
+
+// =====================================================================
+// INIT
+// =====================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  renderTagChips('ruleFinalSaleChips',  rules.finalSaleTags,  v => rules.finalSaleTags = v,  'add tag');
+  renderTagChips('ruleAllChips',        rules.allProductTags, v => rules.allProductTags = v, 'add tag');
+  renderTagChips('ruleAutoStripChips',  rules.autoStrip,      v => rules.autoStrip = v,      'add tag');
+  renderMappings();
+  setupDrop('masterZone',  handleMasterDrop);
+  setupDrop('shopifyZone', handleShopifyDrop);
+  document.getElementById('masterInput').addEventListener('change',  e => handleMasterDrop(e.target.files));
+  document.getElementById('shopifyInput').addEventListener('change', e => handleShopifyDrop(e.target.files));
+});
+
+// =====================================================================
+// MODE
+// =====================================================================
+function setMode(m) {
+  appMode = m;
+  document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+  if (m === 'markdowns') document.getElementById('modeMarkdowns').classList.add('selected');
+  document.getElementById('uploadCard').classList.remove('card-locked');
+  updateLocks();
+}
+
+// =====================================================================
+// TAG CHIP EDITOR
+// =====================================================================
+function renderTagChips(containerId, list, setter, placeholder) {
+  const wrap = document.getElementById(containerId);
+  wrap.innerHTML = '';
+  list.forEach((tag, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `<span>${esc(tag)}</span><span class="x" title="Remove">×</span>`;
+    chip.querySelector('.x').onclick = () => { list.splice(i, 1); setter(list); renderTagChips(containerId, list, setter, placeholder); };
+    wrap.appendChild(chip);
+  });
+  const adder = document.createElement('span');
+  adder.className = 'tag-chip tag-chip-add';
+  adder.innerHTML = `+ <input type="text" placeholder="${placeholder}">`;
+  const input = adder.querySelector('input');
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const v = input.value.trim();
+      if (v && !list.includes(v)) { list.push(v); setter(list); renderTagChips(containerId, list, setter, placeholder); setTimeout(() => document.getElementById(containerId).querySelector('input')?.focus(), 30); }
+    }
+  });
+  wrap.appendChild(adder);
+}
+
+// =====================================================================
+// DROP ZONES
+// =====================================================================
+function setupDrop(id, handler) {
+  const el = document.getElementById(id);
+  el.addEventListener('dragover',  e => { e.preventDefault(); el.classList.add('drag-over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+  el.addEventListener('drop',      e => { e.preventDefault(); el.classList.remove('drag-over'); handler(e.dataTransfer.files); });
+}
+
+function parseFile(file, cb) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const wb   = XLSX.read(e.target.result, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      cb(data);
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    Papa.parse(file, { header: true, skipEmptyLines: true, complete: res => cb(res.data) });
+  }
+}
+
+function handleMasterDrop(files) {
+  if (!files.length) return;
+  const file = files[0];
+  parseFile(file, data => {
+    masterData = normalizeMasterRows(data);
+    paintLoaded('masterZone', '📋', file.name, `${masterData.length.toLocaleString()} products`);
+    refreshSuggestions();
+    updateLocks();
+    updateRunBtn();
+  });
+}
+
+function handleShopifyDrop(files) {
+  if (!files.length) return;
+  const file = files[0];
+  parseFile(file, data => {
+    shopifyData = data;
+    const titles = new Set(data.map(r => (r.Title || '').trim()).filter(Boolean));
+    paintLoaded('shopifyZone', '🛍️', file.name, `${data.length.toLocaleString()} variant rows · ${titles.size} products`);
+    refreshSuggestions();
+    updateLocks();
+    updateRunBtn();
+  });
+}
+
+function paintLoaded(zoneId, fallbackIcon, fileName, sub) {
+  const zone = document.getElementById(zoneId);
+  zone.classList.add('loaded');
+  zone.innerHTML = `
+    <div class="drop-icon">✅</div>
+    <div class="drop-title" style="color:#2e7d32">${esc(fileName)}</div>
+    <div class="drop-sub">${esc(sub)}</div>
+    <input type="file" id="${zoneId === 'masterZone' ? 'masterInput' : 'shopifyInput'}" accept=".csv,.xlsx,.xls" style="display:none">`;
+  const inputId = zoneId === 'masterZone' ? 'masterInput' : 'shopifyInput';
+  const handler = zoneId === 'masterZone' ? handleMasterDrop : handleShopifyDrop;
+  document.getElementById(inputId).addEventListener('change', e => handler(e.target.files));
+  zone.onclick = () => document.getElementById(inputId).click();
+}
+
+// =====================================================================
+// MASTER NORMALIZATION — handle column-name variants
+// =====================================================================
+function normalizeMasterRows(rows) {
+  // Strip currency formatting ($ signs, commas, whitespace) so CSV "$55.00" parses correctly.
+  const toNum = v => {
+    if (typeof v === 'number') return v;
+    if (v == null) return 0;
+    const cleaned = String(v).replace(/[$,\s]/g, '');
+    const n = parseFloat(cleaned);
+    return Number.isFinite(n) ? n : 0;
+  };
+  return rows.map(r => {
+    const get = (...keys) => {
+      for (const k of keys) {
+        for (const rk of Object.keys(r)) {
+          if (rk.toLowerCase().trim() === k.toLowerCase()) return r[rk];
+        }
+      }
+      return '';
+    };
+    const sku   = String(get('SKU', 'CC', 'Style-Color', 'Variant SKU')).trim();
+    const upc   = String(get('UPC', 'Barcode', 'Variant Barcode')).trim();
+    const title = String(get('Style - Color', 'Title', 'Product', 'Product Name', 'Name')).trim();
+    const dept  = String(get('Department', 'Dept', 'Category')).trim();
+    const sale  = toNum(get('SALE PRICE', 'Sale Price', 'Sale', 'Pretty Price'));
+    const msrp  = toNum(get('MSRP', 'Compare At', 'Retail Price', 'List Price'));
+    return { sku, upc, title, dept, sale, msrp, raw: r };
+  }).filter(r => r.title || r.sku);
+}
+
+// =====================================================================
+// LOCK / RUN STATE
+// =====================================================================
+function updateLocks() {
+  if (appMode) document.getElementById('uploadCard').classList.remove('card-locked');
+  if (masterData && shopifyData) {
+    document.getElementById('rulesCard').classList.remove('card-locked');
+    document.getElementById('mappingsCard').classList.remove('card-locked');
+  }
+}
+
+function updateRunBtn() {
+  const btn = document.getElementById('runBtn');
+  if (masterData && shopifyData) {
+    btn.disabled = false;
+    btn.textContent = 'Preview changes';
+  } else if (!masterData && !shopifyData) {
+    btn.disabled = true;
+    btn.textContent = 'Upload both files to preview';
+  } else if (!masterData) {
+    btn.disabled = true;
+    btn.textContent = 'Upload master pricing file to preview';
+  } else {
+    btn.disabled = true;
+    btn.textContent = 'Upload Shopify export to preview';
+  }
+}
+
+// =====================================================================
+// SUGGESTED-STRIP POPULATION
+// =====================================================================
+function refreshSuggestions() {
+  const wrap  = document.getElementById('suggestedStripWrap');
+  const owrap = document.getElementById('otherTagsWrap');
+  if (!shopifyData) { return; }
+
+  // Aggregate tags from Shopify CSV (one entry per product/handle)
+  const tagCounts = {};
+  const seenHandles = new Set();
+  for (const r of shopifyData) {
+    const h = r.Handle || r.Title;
+    if (!h || seenHandles.has(h)) continue;
+    seenHandles.add(h);
+    const tagStr = r.Tags || '';
+    tagStr.split(',').map(t => t.trim()).filter(Boolean).forEach(t => {
+      tagCounts[t] = (tagCounts[t] || 0) + 1;
+    });
+  }
+
+  // Build suggested-strip checklist (filter to those actually present)
+  const knownPresent = rules.suggestedStripKnown.filter(t => tagCounts[t]);
+
+  // Q\d Drop \d pattern catch-all
+  const qDropPresent = Object.keys(tagCounts).filter(t => /^Q\d Drop \d/i.test(t) && !knownPresent.includes(t));
+  const allSuggested = [...new Set([...knownPresent, ...qDropPresent])].sort();
+
+  if (allSuggested.length === 0) {
+    wrap.innerHTML = `<div style="color:#888; font-size:11px;">No known lifecycle/merch tags found on uploaded products. Nothing to suggest.</div>`;
+  } else {
+    wrap.innerHTML = `<div class="strip-checkbox-list">` + allSuggested.map(t => `
+      <label class="strip-check">
+        <input type="checkbox" data-tag="${esc(t)}" ${rules.suggestedStripChecked.has(t) ? 'checked' : ''} onchange="toggleSuggested('${esc(t)}', this.checked)">
+        <code>${esc(t)}</code>
+        <span class="count">${tagCounts[t]} product${tagCounts[t] !== 1 ? 's' : ''}</span>
+      </label>`).join('') + `</div>`;
+  }
+
+  // Build "other tags noticed" — everything not in suggested, not structural, not in auto-strip, not in added tags
+  const inSuggested = new Set(allSuggested);
+  const inAutoStrip = new Set(rules.autoStrip);
+  const others = Object.keys(tagCounts)
+    .filter(t => !inSuggested.has(t) && !inAutoStrip.has(t) && !isStructural(t) && !isAddedTag(t))
+    .sort();
+
+  if (others.length === 0) {
+    owrap.innerHTML = `<div style="color:#888; font-size:11px;">No other non-structural tags found.</div>`;
+  } else {
+    owrap.innerHTML = `<div class="strip-checkbox-list">` + others.map(t => `
+      <label class="strip-check">
+        <input type="checkbox" data-tag="${esc(t)}" ${rules.otherTagsChecked.has(t) ? 'checked' : ''} onchange="toggleOther('${esc(t)}', this.checked)">
+        <code>${esc(t)}</code>
+        <span class="count">${tagCounts[t]} product${tagCounts[t] !== 1 ? 's' : ''}</span>
+      </label>`).join('') + `</div>`;
+  }
+}
+
+function toggleSuggested(tag, checked) { checked ? rules.suggestedStripChecked.add(tag) : rules.suggestedStripChecked.delete(tag); }
+function toggleOther(tag, checked) { checked ? rules.otherTagsChecked.add(tag) : rules.otherTagsChecked.delete(tag); }
+
+// =====================================================================
+// NAME MAPPINGS
+// =====================================================================
+function toggleMappings() {
+  mappingsOpen = !mappingsOpen;
+  document.getElementById('mappingBody').style.display = mappingsOpen ? 'block' : 'none';
+  document.getElementById('mappingArrow').classList.toggle('closed', !mappingsOpen);
+}
+function renderMappings() {
+  const body = document.getElementById('mappingRows');
+  body.innerHTML = nameMappings.map((m, i) => `
+    <tr>
+      <td><input value="${esc(m.master)}" onchange="nameMappings[${i}].master = this.value"></td>
+      <td><input value="${esc(m.shopify)}" onchange="nameMappings[${i}].shopify = this.value"></td>
+      <td><button class="btn-remove" onclick="nameMappings.splice(${i},1); renderMappings()">×</button></td>
+    </tr>
+  `).join('');
+}
+function addMapping() { nameMappings.push({ master: '', shopify: '' }); renderMappings(); }
+
+// =====================================================================
+// MATCHING
+// =====================================================================
+function buildShopifyIndex() {
+  // Index Shopify variants by Title (product-level) and capture per-variant data
+  const byTitle = {};
+  const bySku   = {};
+  const byUpc   = {};
+  const masterSkuList = (masterData || []).map(m => m.sku).filter(Boolean);
+  for (const row of shopifyData) {
+    const title = (row.Title || '').trim();
+    if (!title) continue;
+    if (!byTitle[title]) byTitle[title] = { title, handle: row.Handle, productId: row.ID, command: row.Command, tags: row.Tags || '', tagsCommand: row['Tags Command'] || '', variants: [] };
+    const variant = {
+      variantId:   row['Variant ID'],
+      command:     row['Variant Command'],
+      o1n: row['Option1 Name'], o1v: row['Option1 Value'],
+      o2n: row['Option2 Name'], o2v: row['Option2 Value'],
+      o3n: row['Option3 Name'], o3v: row['Option3 Value'],
+      price:       row['Variant Price'],
+      compareAt:   row['Variant Compare At Price'],
+      sku:         row['Variant SKU'] || row['SKU'] || '',
+      barcode:     row['Variant Barcode'] || row['Barcode'] || row['UPC'] || '',
+      rawRow:      row,
+    };
+    byTitle[title].variants.push(variant);
+    if (variant.sku) {
+      const k = String(variant.sku).trim();
+      if (k) {
+        bySku[k] = { product: byTitle[title], variant };
+        // Master-aware indexing: if the variant SKU contains a master SKU as a
+        // dash-bounded prefix or suffix (e.g., variant "INT-BL-SQ101-203-XSM" wraps
+        // master "INT-BL-SQ101-203", or variant "XSM-CTN-C1-U3003-BLK" wraps master
+        // "CTN-C1-U3003-BLK"), also index under the master SKU so matching works
+        // regardless of which side the size token sits on.
+        if (masterSkuList && masterSkuList.length) {
+          for (const ms of masterSkuList) {
+            if (!ms || ms === k) continue;
+            if (k.startsWith(ms + '-') || k.endsWith('-' + ms)) {
+              if (!bySku[ms]) bySku[ms] = { product: byTitle[title], variant };
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (variant.barcode) {
+      const k = String(variant.barcode).trim();
+      if (k) byUpc[k] = { product: byTitle[title], variant };
+    }
+  }
+  return { byTitle, bySku, byUpc };
+}
+
+function matchMasterToShopify(master, idx) {
+  // SKU first
+  if (master.sku && idx.bySku[master.sku]) return { ...idx.bySku[master.sku], how: 'sku' };
+  // UPC second
+  if (master.upc && idx.byUpc[master.upc]) return { ...idx.byUpc[master.upc], how: 'upc' };
+  // Title exact
+  if (master.title && idx.byTitle[master.title]) return { product: idx.byTitle[master.title], variant: null, how: 'title' };
+  // Name mappings
+  for (const m of nameMappings) {
+    if (m.master && m.shopify && m.master.trim() === master.title && idx.byTitle[m.shopify.trim()]) {
+      return { product: idx.byTitle[m.shopify.trim()], variant: null, how: 'mapped' };
+    }
+  }
+  return null;
+}
+
+// =====================================================================
+// AUDIT + RULE APPLICATION
+// =====================================================================
+function runAudit() {
+  if (!masterData || !shopifyData) return;
+  const idx = buildShopifyIndex();
+  const seenShopifyTitles = new Set();
+
+  results = [];
+
+  // Walk master, match to Shopify
+  for (const master of masterData) {
+    const match = matchMasterToShopify(master, idx);
+    if (!match) {
+      results.push({
+        status:    'missing-s',
+        masterTitle: master.title,
+        masterSku:   master.sku,
+        masterUpc:   master.upc,
+        dept:        master.dept,
+        masterSale:  master.sale,
+        masterMsrp:  master.msrp,
+        shopifyTitle: '',
+        product:     null,
+        priceChanges: [],
+        tagBefore:   '',
+        tagAfter:    '',
+        tagAdded:    [],
+        tagRemoved:  [],
+        discountPct: master.msrp > 0 ? Math.round((master.msrp - master.sale) / master.msrp * 1000) / 10 : 0,
+        finalSale:   false,
+        underwear:   master.dept.toLowerCase() === 'underwear',
+      });
+      continue;
+    }
+    seenShopifyTitles.add(match.product.title);
+
+    // Determine if final-sale rule applies
+    const disc = master.msrp > 0 ? (master.msrp - master.sale) / master.msrp : 0;
+    const discPct = Math.round(disc * 1000) / 10;
+    const isUnderwear = (master.dept || '').toLowerCase() === 'underwear';
+    const hitsThreshold = discPct >= rules.threshold - 1e-9;
+    const finalSale = hitsThreshold || isUnderwear;
+
+    // Build per-variant price changes
+    const priceChanges = [];
+    for (const v of match.product.variants) {
+      const currentPrice    = parseFloat(v.price) || 0;
+      const currentCompare  = parseFloat(v.compareAt) || 0;
+      const newPrice    = master.sale;
+      const newCompare  = master.msrp;
+      const priceChanged   = currentPrice !== newPrice;
+      const compareChanged = currentCompare !== newCompare;
+      priceChanges.push({
+        variantId: v.variantId,
+        sizeLabel: [v.o1v, v.o2v, v.o3v].filter(Boolean).join(' / '),
+        currentPrice, newPrice, priceChanged,
+        currentCompare, newCompare, compareChanged,
+        v,
+      });
+    }
+
+    // Tag changes
+    const beforeTags = (match.product.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+    const beforeSet  = new Set(beforeTags);
+    const stripSet   = new Set([
+      ...rules.autoStrip,
+      ...Array.from(rules.suggestedStripChecked),
+      ...Array.from(rules.otherTagsChecked),
+    ]);
+    const addSet     = new Set([
+      ...rules.allProductTags,
+      ...(finalSale ? rules.finalSaleTags : []),
+    ]);
+
+    const afterTags = [...beforeTags.filter(t => !stripSet.has(t))];
+    for (const t of addSet) { if (!afterTags.includes(t)) afterTags.push(t); }
+
+    const afterSet = new Set(afterTags);
+    const tagAdded   = [...afterSet].filter(t => !beforeSet.has(t)).sort((a,b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    const tagRemoved = [...beforeSet].filter(t => !afterSet.has(t)).sort((a,b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+    // Sort final tags for clean output
+    const afterTagsSorted = [...afterSet].sort((a,b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+    const anyPriceChange = priceChanges.some(p => p.priceChanged || p.compareChanged);
+    const anyTagChange   = tagAdded.length > 0 || tagRemoved.length > 0;
+    const status         = (anyPriceChange || anyTagChange) ? 'changed' : 'ok';
+
+    results.push({
+      status,
+      masterTitle: master.title,
+      masterSku:   master.sku,
+      masterUpc:   master.upc,
+      dept:        master.dept,
+      masterSale:  master.sale,
+      masterMsrp:  master.msrp,
+      shopifyTitle: match.product.title,
+      product:     match.product,
+      matchHow:    match.how,
+      priceChanges,
+      tagBefore:   beforeTags.join(', '),
+      tagAfter:    afterTagsSorted.join(', '),
+      tagAdded,
+      tagRemoved,
+      discountPct: discPct,
+      finalSale,
+      underwear:   isUnderwear,
+    });
+  }
+
+  // Walk Shopify, flag any not in master
+  for (const title in idx.byTitle) {
+    if (!seenShopifyTitles.has(title)) {
+      const product = idx.byTitle[title];
+      results.push({
+        status: 'missing-m',
+        masterTitle: '',
+        shopifyTitle: title,
+        product,
+        priceChanges: [],
+        tagBefore:    product.tags,
+        tagAfter:     product.tags,
+        tagAdded:     [],
+        tagRemoved:   [],
+        discountPct:  0,
+        finalSale:    false,
+        underwear:    false,
+        dept:         '',
+      });
+    }
+  }
+
+  activeFilter = 'all';
+  renderResults();
+  updateExportCounts();
+  document.getElementById('resultsSection').classList.remove('hidden');
+  document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateExportCounts() {
+  const ps = buildPricesRows(true).length;
+  const ts = buildTagsRows(true).length;
+  const pr = buildPricesRows(false).length;
+  const tr = buildTagsRows(false).length;
+  const setSub = (id, n, label) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = n === 0 ? `Already up to date — nothing to upload` : `${n.toLocaleString()} ${label}`;
+  };
+  setSub('cntPricesSale',   ps, ps === 1 ? 'variant row' : 'variant rows');
+  setSub('cntTagsSale',     ts, ts === 1 ? 'product row' : 'product rows');
+  setSub('cntPricesRevert', pr, pr === 1 ? 'variant row' : 'variant rows');
+  setSub('cntTagsRevert',   tr, tr === 1 ? 'product row' : 'product rows');
+}
+
+// =====================================================================
+// RESULTS RENDER
+// =====================================================================
+function renderResults() {
+  // Stats
+  const stats = {
+    all:         results.length,
+    changed:     results.filter(r => r.status === 'changed').length,
+    ok:          results.filter(r => r.status === 'ok').length,
+    missingS:    results.filter(r => r.status === 'missing-s').length,
+    missingM:    results.filter(r => r.status === 'missing-m').length,
+    finalSale:   results.filter(r => r.finalSale).length,
+    underwear:   results.filter(r => r.underwear).length,
+  };
+  const statTiles = [
+    { k: 'all',       label: 'Total',         num: stats.all,       cls: '' },
+    { k: 'changed',   label: 'With Changes',  num: stats.changed,   cls: 'c-blue' },
+    { k: 'ok',        label: 'Already Match', num: stats.ok,        cls: 'c-green' },
+    { k: 'missing-s', label: 'Missing Shpfy', num: stats.missingS,  cls: 'c-orange' },
+    { k: 'missing-m', label: 'Missing Master',num: stats.missingM,  cls: 'c-pink' },
+    { k: 'finalSale', label: 'Final Sale',    num: stats.finalSale, cls: 'c-red' },
+    { k: 'underwear', label: 'Underwear',     num: stats.underwear, cls: 'c-purple' },
+  ];
+  document.getElementById('statsRow').innerHTML = statTiles.map(s => `
+    <div class="stat-tile ${s.cls} ${activeFilter === s.k ? 'active' : ''}" onclick="setFilter('${s.k}')">
+      <div class="stat-num">${s.num}</div>
+      <div class="stat-lbl">${s.label}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('filterRow').innerHTML = statTiles.map(s => `
+    <span class="chip ${activeFilter === s.k ? 'active' : ''}" onclick="setFilter('${s.k}')">${s.label} · ${s.num}</span>
+  `).join('');
+
+  // Match-method breakdown — shows how matching succeeded so user can spot fragile matching
+  const mc = { sku: 0, upc: 0, title: 0, mapped: 0 };
+  for (const r of results) {
+    if (r.matchHow && mc[r.matchHow] !== undefined) mc[r.matchHow]++;
+  }
+  const matchParts = [];
+  if (mc.sku)    matchParts.push(`<strong>${mc.sku}</strong> by SKU`);
+  if (mc.upc)    matchParts.push(`<strong>${mc.upc}</strong> by UPC`);
+  if (mc.title)  matchParts.push(`<strong>${mc.title}</strong> by title`);
+  if (mc.mapped) matchParts.push(`<strong>${mc.mapped}</strong> by name mapping`);
+  document.getElementById('matchBreakdown').innerHTML = matchParts.length ? `Matched: ${matchParts.join(' · ')}` : '';
+
+  // Table
+  let view = results;
+  if (activeFilter === 'changed')   view = results.filter(r => r.status === 'changed');
+  if (activeFilter === 'ok')        view = results.filter(r => r.status === 'ok');
+  if (activeFilter === 'missing-s') view = results.filter(r => r.status === 'missing-s');
+  if (activeFilter === 'missing-m') view = results.filter(r => r.status === 'missing-m');
+  if (activeFilter === 'finalSale') view = results.filter(r => r.finalSale);
+  if (activeFilter === 'underwear') view = results.filter(r => r.underwear);
+
+  const viewVariants = view.reduce((sum, r) => sum + (r.priceChanges ? r.priceChanges.filter(p => p.priceChanged || p.compareChanged).length : 0), 0);
+  const totalVariantChanges = results.reduce((sum, r) => sum + (r.priceChanges ? r.priceChanges.filter(p => p.priceChanged || p.compareChanged).length : 0), 0);
+  document.getElementById('tableMeta').textContent =
+    `Showing ${view.length.toLocaleString()} of ${results.length.toLocaleString()} products` +
+    (viewVariants > 0 ? ` · ${viewVariants.toLocaleString()} variant row${viewVariants !== 1 ? 's' : ''} in view` : '') +
+    (totalVariantChanges !== viewVariants ? ` (${totalVariantChanges.toLocaleString()} total changing)` : '');
+
+  const tbody = document.getElementById('resultsBody');
+  if (view.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-msg">No rows match this filter</div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = view.map(r => {
+    const rowCls = r.status === 'changed' ? 'r-changed' : r.status === 'missing-s' ? 'r-missing-s' : r.status === 'missing-m' ? 'r-missing-m' : 'r-ok';
+
+    let statusBadge = '';
+    if (r.status === 'ok')        statusBadge = `<span class="b b-match">No Change</span>`;
+    if (r.status === 'changed')   statusBadge = `<span class="b b-changed">Update</span>`;
+    if (r.status === 'missing-s') statusBadge = `<span class="b b-missing-s">Missing Shpfy</span>`;
+    if (r.status === 'missing-m') statusBadge = `<span class="b b-missing-m">Missing Master</span>`;
+
+    const productCell = `
+      <div><strong>${esc(r.masterTitle || r.shopifyTitle)}</strong></div>
+      ${r.masterTitle && r.shopifyTitle && r.masterTitle !== r.shopifyTitle ? `<div class="detail">Shopify: ${esc(r.shopifyTitle)}</div>` : ''}
+      ${r.masterSku ? `<div class="sku">SKU ${esc(r.masterSku)}</div>` : ''}`;
+
+    const matchCell = r.matchHow ? `<span class="b b-match">${r.matchHow.toUpperCase()}</span>` : `<span style="color:#bbb; font-size:11px;">—</span>`;
+
+    let priceCell = '';
+    if (r.status === 'missing-s') {
+      priceCell = `<span class="price-new">$${r.masterSale} / $${r.masterMsrp}</span><div class="detail">Master values</div>`;
+    } else if (r.status === 'missing-m') {
+      priceCell = `<span style="color:#bbb; font-size:11px;">—</span>`;
+    } else if (r.priceChanges.length) {
+      const firstChange = r.priceChanges[0];
+      const anyChange = r.priceChanges.some(p => p.priceChanged || p.compareChanged);
+      if (anyChange) {
+        const lines = [];
+        if (firstChange.priceChanged) {
+          lines.push(`<div><span class="price-old">$${firstChange.currentPrice}</span><span class="price-new">$${firstChange.newPrice}</span></div>`);
+        }
+        if (firstChange.compareChanged) {
+          lines.push(`<div class="detail">Compare: $${firstChange.currentCompare} → $${firstChange.newCompare}</div>`);
+        }
+        const changedVariants = r.priceChanges.filter(p => p.priceChanged || p.compareChanged).length;
+        const totalVariants = r.priceChanges.length;
+        const variantLabel = changedVariants === totalVariants
+          ? `${totalVariants} variant${totalVariants !== 1 ? 's' : ''}`
+          : `${changedVariants} of ${totalVariants} variants`;
+        lines.push(`<div class="detail" style="margin-top:3px;">${variantLabel} changing</div>`);
+        priceCell = lines.join('');
+      } else {
+        priceCell = `<span class="price-eq">$${firstChange.newPrice} / $${firstChange.newCompare}</span><div class="detail">Already matches</div>`;
+      }
+    }
+
+    const flags = [];
+    if (r.finalSale) flags.push(`<span class="b b-finalsale">Final Sale</span>`);
+    if (r.discountPct >= 50) flags.push(`<span class="b b-discount">${r.discountPct}%</span>`);
+    if (r.underwear) flags.push(`<span class="b b-underwear">UW</span>`);
+
+    let tagCell = '';
+    if (r.tagAdded.length || r.tagRemoved.length) {
+      tagCell = `<div class="tag-list">
+        ${r.tagAdded.map(t => `<span class="tag-add">+ ${esc(t)}</span>`).join('')}
+        ${r.tagRemoved.map(t => `<span class="tag-rm">− ${esc(t)}</span>`).join('')}
+      </div>`;
+    } else if (r.status === 'missing-s' || r.status === 'missing-m') {
+      tagCell = `<span style="color:#bbb; font-size:11px;">—</span>`;
+    } else {
+      tagCell = `<span style="color:#bbb; font-size:11px;">No tag changes</span>`;
+    }
+
+    return `<tr class="${rowCls}">
+      <td>${statusBadge}</td>
+      <td>${productCell}</td>
+      <td>${matchCell}</td>
+      <td><span style="font-size:11px; color:#555;">${esc(r.dept || '—')}</span></td>
+      <td>${priceCell}</td>
+      <td>${r.discountPct ? `<span style="font-size:12px; color:#555;">${r.discountPct}%</span>` : '<span style="color:#bbb;">—</span>'}</td>
+      <td>${flags.join(' ') || '<span style="color:#bbb;">—</span>'}</td>
+      <td>${tagCell}</td>
+    </tr>`;
+  }).join('');
+}
+
+function setFilter(k) { activeFilter = k; renderResults(); }
+
+// =====================================================================
+// CSV DOWNLOADS
+// =====================================================================
+function downloadCsv(filename, headers, rows) {
+  const csv = Papa.unparse({ fields: headers, data: rows }, { quotes: true, header: true });
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+const PRICES_HEADERS = ['ID', 'Handle', 'Command', 'Title', 'Variant ID', 'Variant Command', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Option3 Name', 'Option3 Value', 'Variant Price', 'Variant Compare At Price'];
+const TAGS_HEADERS   = ['ID', 'Handle', 'Command', 'Title', 'Tags', 'Tags Command', 'Metafield: badge.text [single_line_text_field]'];
+
+function buildPricesRows(useNew) {
+  // Emit only variants that exist in BOTH files (matched product) AND have an actual
+  // price or compare-at change. Missing rows and no-op rows are excluded so the upload
+  // contains only what needs to update.
+  const rows = [];
+  for (const r of results) {
+    if (!r.product || r.status === 'missing-s' || r.status === 'missing-m') continue;
+    for (const pc of r.priceChanges) {
+      if (!pc.priceChanged && !pc.compareChanged) continue;
+      const v = pc.v;
+      const price   = useNew ? r.masterSale : v.price;
+      const compare = useNew ? r.masterMsrp : v.compareAt;
+      rows.push([
+        r.product.productId, r.product.handle, r.product.command || 'MERGE', r.product.title,
+        v.variantId, v.command || 'MERGE',
+        v.o1n || '', v.o1v || '',
+        v.o2n || '', v.o2v || '',
+        v.o3n || '', v.o3v || '',
+        price, compare,
+      ]);
+    }
+  }
+  return rows;
+}
+
+function buildTagsRows(useNew) {
+  // Emit only products that exist in BOTH files AND have actual tag changes.
+  const rows = [];
+  for (const r of results) {
+    if (!r.product || r.status === 'missing-s' || r.status === 'missing-m') continue;
+    if (r.tagAdded.length === 0 && r.tagRemoved.length === 0) continue;
+    rows.push([
+      r.product.productId, r.product.handle, r.product.command || 'MERGE', r.product.title,
+      useNew ? r.tagAfter : r.tagBefore,
+      r.product.tagsCommand || 'REPLACE',
+      '', // Metafield: badge.text — left blank so import clears any existing badge copy
+    ]);
+  }
+  return rows;
+}
+
+function downloadPricesSale()   { downloadCsv(stamped('Prices_Sale-Live.csv'),   PRICES_HEADERS, buildPricesRows(true)); }
+function downloadPricesRevert() { downloadCsv(stamped('Prices_Revert.csv'),      PRICES_HEADERS, buildPricesRows(false)); }
+function downloadTagsSale()     { downloadCsv(stamped('Tags_Sale-Live.csv'),     TAGS_HEADERS,   buildTagsRows(true)); }
+function downloadTagsRevert()   { downloadCsv(stamped('Tags_Revert.csv'),        TAGS_HEADERS,   buildTagsRows(false)); }
+
+function stamped(base) {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}${m}${day}_${base}`;
+}
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+</script>
+</body>
+</html>
