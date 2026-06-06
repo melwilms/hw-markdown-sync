@@ -16,10 +16,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .header-sep { color: #555; font-size: 18px; }
 .header-title { font-size: 14px; color: #aaa; letter-spacing: 0.5px; }
 
-.main { max-width: 1280px; margin: 0 auto; padding: 28px 24px; }
+.main { max-width: 1280px; margin: 0 auto; padding: 32px 24px; }
 
-.card { background: white; border-radius: 10px; border: 1px solid #e8e8e8; padding: 22px 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-.card-label { font-size: 14px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.2px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+.card { background: white; border-radius: 10px; border: 1px solid #e8e8e8; padding: 24px 26px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+.card-label { font-size: 14px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.2px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
 
 .card-locked { opacity: 0.38; pointer-events: none; }
 .card-body { overflow: hidden; max-height: 2000px; transition: max-height 0.35s ease, opacity 0.3s ease; opacity: 1; }
@@ -56,7 +56,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 input[type=file] { display: none; }
 
 /* Rules card */
-.rule-section { margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid #f0f0f0; }
+.rule-section { margin-bottom: 22px; padding-bottom: 20px; border-bottom: 1px solid #f0f0f0; }
 .rule-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 .rule-title { font-size: 12px; font-weight: 700; color: #333; margin-bottom: 6px; letter-spacing: 0.2px; text-transform: uppercase; }
 .rule-desc { font-size: 11px; color: #999; margin-bottom: 10px; line-height: 1.5; }
@@ -95,13 +95,13 @@ input[type=file] { display: none; }
 .mapping-hint { font-size: 11px; color: #bbb; margin-bottom: 10px; line-height: 1.5; }
 
 /* Run */
-.run-wrap { margin: 6px 0 8px; }
-.run-btn { width: 100%; padding: 15px; border: none; border-radius: 8px; background: #1a1a1a; color: white; font-size: 15px; font-weight: 600; cursor: pointer; letter-spacing: 0.3px; transition: background 0.18s; }
+.run-wrap { margin: 32px 0 28px; }
+.run-btn { width: 100%; padding: 16px; border: none; border-radius: 8px; background: #1a1a1a; color: white; font-size: 15px; font-weight: 600; cursor: pointer; letter-spacing: 0.3px; transition: background 0.18s; }
 .run-btn:hover:not(:disabled) { background: #333; }
 .run-btn:disabled { background: #ccc; color: #fff; cursor: not-allowed; }
 
 /* Stats */
-.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px; }
 .stat-tile { background: white; border: 1px solid #e8e8e8; border-radius: 8px; padding: 14px 12px; text-align: center; cursor: pointer; transition: all 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
 .stat-tile:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.08); }
 .stat-tile.active { border-color: #1a1a1a; box-shadow: 0 0 0 2px #1a1a1a; }
@@ -127,7 +127,7 @@ input[type=file] { display: none; }
 .match-breakdown strong { color: #555; font-weight: 600; }
 
 /* Preview banner */
-.preview-banner { display: flex; gap: 12px; align-items: flex-start; background: #f0f9ff; border-left: 4px solid #1e88e5; padding: 14px 18px; margin: 16px 0; border-radius: 6px; font-size: 13px; line-height: 1.5; color: #1e3a5f; }
+.preview-banner { display: flex; gap: 12px; align-items: flex-start; background: #f0f9ff; border-left: 4px solid #1e88e5; padding: 16px 20px; margin: 28px 0; border-radius: 6px; font-size: 13px; line-height: 1.5; color: #1e3a5f; }
 .preview-banner-icon { font-size: 16px; flex-shrink: 0; line-height: 1.3; }
 .preview-banner em { font-style: italic; color: #0c4a7a; }
 
@@ -323,7 +323,6 @@ table.results-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   <!-- Results -->
   <div id="resultsSection" class="hidden">
     <div class="stats-row" id="statsRow"></div>
-    <div class="filter-row" id="filterRow"></div>
     <div id="matchBreakdown" class="match-breakdown"></div>
 
     <div class="card" style="padding: 16px 20px;">
@@ -923,10 +922,6 @@ function renderResults() {
     </div>
   `).join('');
 
-  document.getElementById('filterRow').innerHTML = statTiles.map(s => `
-    <span class="chip ${activeFilter === s.k ? 'active' : ''}" onclick="setFilter('${s.k}')">${s.label} · ${s.num}</span>
-  `).join('');
-
   // Match-method breakdown — shows how matching succeeded so user can spot fragile matching
   const mc = { sku: 0, upc: 0, title: 0, mapped: 0 };
   for (const r of results) {
@@ -950,10 +945,14 @@ function renderResults() {
 
   const viewVariants = view.reduce((sum, r) => sum + (r.priceChanges ? r.priceChanges.filter(p => p.priceChanged || p.compareChanged).length : 0), 0);
   const totalVariantChanges = results.reduce((sum, r) => sum + (r.priceChanges ? r.priceChanges.filter(p => p.priceChanged || p.compareChanged).length : 0), 0);
-  document.getElementById('tableMeta').textContent =
-    `Showing ${view.length.toLocaleString()} of ${results.length.toLocaleString()} products` +
-    (viewVariants > 0 ? ` · ${viewVariants.toLocaleString()} variant row${viewVariants !== 1 ? 's' : ''} in view` : '') +
-    (totalVariantChanges !== viewVariants ? ` (${totalVariantChanges.toLocaleString()} total changing)` : '');
+  let meta = `Showing ${view.length.toLocaleString()} of ${results.length.toLocaleString()} products`;
+  if (viewVariants > 0) {
+    meta += ` · ${viewVariants.toLocaleString()} variant row${viewVariants !== 1 ? 's' : ''} in view`;
+    if (totalVariantChanges !== viewVariants) {
+      meta += ` (${totalVariantChanges.toLocaleString()} total changing)`;
+    }
+  }
+  document.getElementById('tableMeta').textContent = meta;
 
   const tbody = document.getElementById('resultsBody');
   if (view.length === 0) {
