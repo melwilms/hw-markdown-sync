@@ -153,6 +153,7 @@ table.results-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .b-finalsale  { background: #fee2e2; color: #991b1b; }
 .b-discount   { background: #fef3c7; color: #92400e; }
 .b-underwear  { background: #ede9fe; color: #6b21a8; }
+.b-issue      { background: #fff7e6; color: #b45309; border: 1px solid #fde68a; }
 
 .sku  { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; color: #555; }
 .detail { font-size: 10px; color: #aaa; margin-top: 1px; }
@@ -826,6 +827,17 @@ function runAudit() {
     const anyTagChange   = tagAdded.length > 0 || tagRemoved.length > 0;
     const status         = (anyPriceChange || anyTagChange) ? 'changed' : 'ok';
 
+    // Detect data-quality issues that pushed this row to a weaker match
+    const dataIssues = [];
+    if (match.how === 'title') {
+      const allBlankSkus = match.product.variants.every(v => !v.sku || !String(v.sku).trim());
+      if (allBlankSkus) {
+        dataIssues.push('no-shopify-sku');
+      } else if (master.sku) {
+        dataIssues.push('master-sku-not-in-shopify');
+      }
+    }
+
     results.push({
       status,
       masterTitle: master.title,
@@ -845,6 +857,7 @@ function runAudit() {
       discountPct: discPct,
       finalSale,
       underwear:   isUnderwear,
+      dataIssues,
     });
   }
 
@@ -905,15 +918,17 @@ function renderResults() {
     missingM:    results.filter(r => r.status === 'missing-m').length,
     finalSale:   results.filter(r => r.finalSale).length,
     underwear:   results.filter(r => r.underwear).length,
+    dataIssues:  results.filter(r => r.dataIssues && r.dataIssues.length > 0).length,
   };
   const statTiles = [
-    { k: 'all',       label: 'Total',         num: stats.all,       cls: '' },
-    { k: 'changed',   label: 'With Changes',  num: stats.changed,   cls: 'c-blue' },
-    { k: 'ok',        label: 'Already Match', num: stats.ok,        cls: 'c-green' },
-    { k: 'missing-s', label: 'Missing Shpfy', num: stats.missingS,  cls: 'c-orange' },
-    { k: 'missing-m', label: 'Missing Master',num: stats.missingM,  cls: 'c-pink' },
-    { k: 'finalSale', label: 'Final Sale',    num: stats.finalSale, cls: 'c-red' },
-    { k: 'underwear', label: 'Underwear',     num: stats.underwear, cls: 'c-purple' },
+    { k: 'all',         label: 'Total',         num: stats.all,        cls: '' },
+    { k: 'changed',     label: 'With Changes',  num: stats.changed,    cls: 'c-blue' },
+    { k: 'ok',          label: 'Already Match', num: stats.ok,         cls: 'c-green' },
+    { k: 'missing-s',   label: 'Missing Shpfy', num: stats.missingS,   cls: 'c-orange' },
+    { k: 'missing-m',   label: 'Missing Master',num: stats.missingM,   cls: 'c-pink' },
+    { k: 'dataIssues',  label: 'Data Issues',   num: stats.dataIssues, cls: 'c-yellow' },
+    { k: 'finalSale',   label: 'Final Sale',    num: stats.finalSale,  cls: 'c-red' },
+    { k: 'underwear',   label: 'Underwear',     num: stats.underwear,  cls: 'c-purple' },
   ];
   document.getElementById('statsRow').innerHTML = statTiles.map(s => `
     <div class="stat-tile ${s.cls} ${activeFilter === s.k ? 'active' : ''}" onclick="setFilter('${s.k}')">
@@ -936,12 +951,13 @@ function renderResults() {
 
   // Table
   let view = results;
-  if (activeFilter === 'changed')   view = results.filter(r => r.status === 'changed');
-  if (activeFilter === 'ok')        view = results.filter(r => r.status === 'ok');
-  if (activeFilter === 'missing-s') view = results.filter(r => r.status === 'missing-s');
-  if (activeFilter === 'missing-m') view = results.filter(r => r.status === 'missing-m');
-  if (activeFilter === 'finalSale') view = results.filter(r => r.finalSale);
-  if (activeFilter === 'underwear') view = results.filter(r => r.underwear);
+  if (activeFilter === 'changed')    view = results.filter(r => r.status === 'changed');
+  if (activeFilter === 'ok')         view = results.filter(r => r.status === 'ok');
+  if (activeFilter === 'missing-s')  view = results.filter(r => r.status === 'missing-s');
+  if (activeFilter === 'missing-m')  view = results.filter(r => r.status === 'missing-m');
+  if (activeFilter === 'finalSale')  view = results.filter(r => r.finalSale);
+  if (activeFilter === 'underwear')  view = results.filter(r => r.underwear);
+  if (activeFilter === 'dataIssues') view = results.filter(r => r.dataIssues && r.dataIssues.length > 0);
 
   const viewVariants = view.reduce((sum, r) => sum + (r.priceChanges ? r.priceChanges.filter(p => p.priceChanged || p.compareChanged).length : 0), 0);
   const totalVariantChanges = results.reduce((sum, r) => sum + (r.priceChanges ? r.priceChanges.filter(p => p.priceChanged || p.compareChanged).length : 0), 0);
@@ -1008,6 +1024,8 @@ function renderResults() {
     if (r.finalSale) flags.push(`<span class="b b-finalsale">Final Sale</span>`);
     if (r.discountPct >= 50) flags.push(`<span class="b b-discount">${r.discountPct}%</span>`);
     if (r.underwear) flags.push(`<span class="b b-underwear">UW</span>`);
+    if (r.dataIssues?.includes('no-shopify-sku')) flags.push(`<span class="b b-issue" title="Shopify product has no Variant SKUs populated — likely not launched yet, or admin needs to add them">No Shpfy SKU</span>`);
+    if (r.dataIssues?.includes('master-sku-not-in-shopify')) flags.push(`<span class="b b-issue" title="This master SKU doesn't exist as a Shopify variant — likely a size that hasn't been created in Shopify yet">Variant gap</span>`);
 
     let tagCell = '';
     if (r.tagAdded.length || r.tagRemoved.length) {
