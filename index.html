@@ -131,6 +131,14 @@ input[type=file] { display: none; }
 .preview-banner-icon { font-size: 16px; flex-shrink: 0; line-height: 1.3; }
 .preview-banner em { font-style: italic; color: #0c4a7a; }
 
+/* Planning-team notification banner */
+.notify-banner { display: flex; gap: 12px; align-items: flex-start; background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px 20px; margin: 0 0 28px; border-radius: 6px; font-size: 13px; line-height: 1.5; color: #78350f; }
+.notify-banner-icon { font-size: 16px; flex-shrink: 0; line-height: 1.3; }
+.notify-banner code { background: rgba(120, 53, 15, 0.1); padding: 1px 6px; border-radius: 3px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; }
+.notify-banner-list { margin-top: 8px; font-size: 12px; color: #92400e; line-height: 1.6; max-height: 140px; overflow-y: auto; }
+.notify-banner-list-item { padding: 2px 0; border-top: 1px solid rgba(120, 53, 15, 0.15); }
+.notify-banner-list-item:first-child { border-top: none; }
+
 /* Table */
 .table-meta { font-size: 11px; color: #aaa; margin-bottom: 8px; }
 .table-wrap { overflow-x: auto; overflow-y: auto; max-height: 560px; border-radius: 6px; border: 1px solid #ebebeb; }
@@ -354,6 +362,14 @@ table.results-table { width: 100%; border-collapse: collapse; font-size: 12px; }
       </div>
     </div>
 
+    <div id="notifyPlanningBanner" class="notify-banner hidden">
+      <span class="notify-banner-icon">📣</span>
+      <div>
+        <strong>Notify the Planning team:</strong> <span id="nordstromCount">0</span> product<span id="nordstromPlural">s</span> will have the <code>channel:nordstrom</code> tag removed with this update.
+        <div class="notify-banner-list" id="nordstromList"></div>
+      </div>
+    </div>
+
     <div class="card" id="exportCard">
       <div class="card-label">Downloads <span style="font-weight:400; color:#888; font-size:11px; margin-left:6px;">Shopify-importable</span></div>
       <p class="mapping-hint">Four CSVs — two to go live, two to revert after the sale ends. Only rows that exist in both files and have actual changes are included. Import these through Shopify admin → Products → Import to apply.</p>
@@ -394,7 +410,7 @@ let rules = {
   threshold: 50,
   finalSaleTags: ['final-sale', 'exclude_rebuy', 'bis-hidden'],
   allProductTags: ['sale-section', 'bis-hidden'],
-  autoStrip: ['bulk:tier-2', 'bulk:tier-3'],
+  autoStrip: ['bulk:tier-2', 'bulk:tier-3', 'channel:nordstrom'],
   suggestedStripKnown: ['checkbox-eligible', 'seasonal-essentials', 'vacation-edit', 'event-shop', 'Q4 Drop 1', 'Q4 Drop 2', 'Q4 Drop 3', 'Q4 Drop 4', 'Q1 Drop 1', 'Q1 Drop 2', 'Q2 Drop 1', 'Q2 Drop 2', 'Q3 Drop 1', 'Q3 Drop 2'],
   suggestedStripChecked: new Set(),
   otherTagsChecked: new Set(),
@@ -886,8 +902,30 @@ function runAudit() {
   activeFilter = 'all';
   renderResults();
   updateExportCounts();
+  updateNordstromBanner();
   document.getElementById('resultsSection').classList.remove('hidden');
   document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Show a callout if any products will have channel:nordstrom stripped, so the user
+// can notify the Planning team before pushing the update to Shopify.
+function updateNordstromBanner() {
+  const banner = document.getElementById('notifyPlanningBanner');
+  if (!banner) return;
+  const affected = results.filter(r =>
+    r.product && r.status !== 'missing-s' && r.status !== 'missing-m' &&
+    r.tagRemoved && r.tagRemoved.includes('channel:nordstrom')
+  );
+  if (affected.length === 0) {
+    banner.classList.add('hidden');
+    return;
+  }
+  banner.classList.remove('hidden');
+  document.getElementById('nordstromCount').textContent = affected.length.toLocaleString();
+  document.getElementById('nordstromPlural').textContent = affected.length === 1 ? '' : 's';
+  document.getElementById('nordstromList').innerHTML = affected
+    .map(r => `<div class="notify-banner-list-item">${esc(r.shopifyTitle || r.masterTitle)}</div>`)
+    .join('');
 }
 
 function updateExportCounts() {
