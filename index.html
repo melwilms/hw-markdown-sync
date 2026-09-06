@@ -138,6 +138,13 @@ input[type=file] { display: none; }
 .notify-banner-list { margin-top: 8px; font-size: 12px; color: #92400e; line-height: 1.6; max-height: 140px; overflow-y: auto; }
 .notify-banner-list-item { padding: 2px 0; border-top: 1px solid rgba(120, 53, 15, 0.15); }
 .notify-banner-list-item:first-child { border-top: none; }
+.notify-banner-group { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(120, 53, 15, 0.2); }
+.notify-banner-group:first-of-type { border-top: none; }
+.notify-banner-group-header { font-weight: 600; font-size: 12px; color: #78350f; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.notify-banner-group-header code { background: rgba(120, 53, 15, 0.15); padding: 2px 8px; border-radius: 4px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; color: #78350f; }
+.notify-banner-group-count { font-weight: 500; color: #92400e; font-size: 11px; }
+.notify-banner-group-list { padding-left: 4px; font-size: 12px; color: #92400e; line-height: 1.6; max-height: 120px; overflow-y: auto; }
+.notify-banner-group-item { padding: 1px 0; }
 
 /* Table */
 .table-meta { font-size: 11px; color: #aaa; margin-bottom: 8px; }
@@ -364,9 +371,9 @@ table.results-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 
     <div id="notifyPlanningBanner" class="notify-banner hidden">
       <span class="notify-banner-icon">📣</span>
-      <div>
-        <strong>Notify the Planning team:</strong> <span id="nordstromCount">0</span> product<span id="nordstromPlural">s</span> will have the <code>channel:nordstrom</code> tag removed with this update.
-        <div class="notify-banner-list" id="nordstromList"></div>
+      <div style="flex:1;">
+        <strong>Notify the Planning team:</strong> the following channel tags will be removed with this update.
+        <div id="channelTagGroups"></div>
       </div>
     </div>
 
@@ -410,7 +417,8 @@ let rules = {
   threshold: 50,
   finalSaleTags: ['final-sale', 'exclude_rebuy', 'bis-hidden'],
   allProductTags: ['sale-section', 'bis-hidden'],
-  autoStrip: ['bulk:tier-2', 'bulk:tier-3', 'channel:nordstrom'],
+  autoStrip: ['bulk:tier-2', 'bulk:tier-3'],
+  autoStripPrefixes: ['channel:'],  // any tag starting with these is auto-stripped (e.g. channel:nordstrom, channel:target, channel:amazon)
   suggestedStripKnown: ['checkbox-eligible', 'seasonal-essentials', 'vacation-edit', 'event-shop', 'Q4 Drop 1', 'Q4 Drop 2', 'Q4 Drop 3', 'Q4 Drop 4', 'Q1 Drop 1', 'Q1 Drop 2', 'Q2 Drop 1', 'Q2 Drop 2', 'Q3 Drop 1', 'Q3 Drop 2'],
   suggestedStripChecked: new Set(),
   otherTagsChecked: new Set(),
@@ -829,7 +837,9 @@ function runAudit() {
       ...(finalSale ? rules.finalSaleTags : []),
     ]);
 
-    const afterTags = [...beforeTags.filter(t => !stripSet.has(t))];
+    const stripPrefixes = rules.autoStripPrefixes || [];
+    const shouldStrip = t => stripSet.has(t) || stripPrefixes.some(p => t.startsWith(p));
+    const afterTags = [...beforeTags.filter(t => !shouldStrip(t))];
     for (const t of addSet) { if (!afterTags.includes(t)) afterTags.push(t); }
 
     const afterSet = new Set(afterTags);
@@ -907,25 +917,46 @@ function runAudit() {
   document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// Show a callout if any products will have channel:nordstrom stripped, so the user
-// can notify the Planning team before pushing the update to Shopify.
+// Show a callout if any products will have channel:* tags stripped, so the user
+// can notify the Planning team before pushing the update to Shopify. Groups by tag
+// so each channel gets its own product list.
 function updateNordstromBanner() {
   const banner = document.getElementById('notifyPlanningBanner');
   if (!banner) return;
-  const affected = results.filter(r =>
-    r.product && r.status !== 'missing-s' && r.status !== 'missing-m' &&
-    r.tagRemoved && r.tagRemoved.includes('channel:nordstrom')
-  );
-  if (affected.length === 0) {
+
+  // Group affected products by which channel:* tag they had removed
+  const byTag = {};  // tag -> [productTitle]
+  for (const r of results) {
+    if (!r.product || r.status === 'missing-s' || r.status === 'missing-m') continue;
+    if (!r.tagRemoved || !r.tagRemoved.length) continue;
+    for (const t of r.tagRemoved) {
+      if (t.startsWith('channel:')) {
+        (byTag[t] = byTag[t] || []).push(r.shopifyTitle || r.masterTitle);
+      }
+    }
+  }
+
+  const tagKeys = Object.keys(byTag).sort();
+  if (tagKeys.length === 0) {
     banner.classList.add('hidden');
     return;
   }
   banner.classList.remove('hidden');
-  document.getElementById('nordstromCount').textContent = affected.length.toLocaleString();
-  document.getElementById('nordstromPlural').textContent = affected.length === 1 ? '' : 's';
-  document.getElementById('nordstromList').innerHTML = affected
-    .map(r => `<div class="notify-banner-list-item">${esc(r.shopifyTitle || r.masterTitle)}</div>`)
-    .join('');
+  const html = tagKeys.map(tag => {
+    const products = byTag[tag].sort();
+    const count = products.length;
+    return `
+      <div class="notify-banner-group">
+        <div class="notify-banner-group-header">
+          <code>${esc(tag)}</code>
+          <span class="notify-banner-group-count">${count} product${count === 1 ? '' : 's'}</span>
+        </div>
+        <div class="notify-banner-group-list">
+          ${products.map(p => `<div class="notify-banner-group-item">• ${esc(p)}</div>`).join('')}
+        </div>
+      </div>`;
+  }).join('');
+  document.getElementById('channelTagGroups').innerHTML = html;
 }
 
 function updateExportCounts() {
