@@ -960,18 +960,37 @@ function updateNordstromBanner() {
 }
 
 function updateExportCounts() {
-  const ps = buildPricesRows(true).length;
-  const ts = buildTagsRows(true).length;
-  const pr = buildPricesRows(false).length;
-  const tr = buildTagsRows(false).length;
-  const setSub = (id, n, label) => {
+  // Prices CSVs are variant-level, but users also want the distinct product count to
+  // cross-reference against Shopify when uploading. Count unique Handle (col index 1)
+  // since Prices rows share Handle at the product level.
+  const psRows = buildPricesRows(true);
+  const trRows = buildTagsRows(true);
+  const prRows = buildPricesRows(false);
+  const tsRows = buildTagsRows(false);
+  const uniqueProducts = rows => new Set(rows.map(r => r[1])).size;  // Handle is index 1
+
+  const ps = psRows.length, psP = uniqueProducts(psRows);
+  const ts = trRows.length;  // tags CSV is already product-level, so rows == products
+  const pr = prRows.length, prP = uniqueProducts(prRows);
+  const tr = tsRows.length;
+
+  const setPriceSub = (id, variants, products) => {
     const el = document.getElementById(id);
-    if (el) el.textContent = n === 0 ? `Already up to date — nothing to upload` : `${n.toLocaleString()} ${label}`;
+    if (!el) return;
+    if (variants === 0) { el.textContent = 'Already up to date — nothing to upload'; return; }
+    el.textContent = `${variants.toLocaleString()} variant row${variants === 1 ? '' : 's'} · ${products.toLocaleString()} product${products === 1 ? '' : 's'}`;
   };
-  setSub('cntPricesSale',   ps, ps === 1 ? 'variant row' : 'variant rows');
-  setSub('cntTagsSale',     ts, ts === 1 ? 'product row' : 'product rows');
-  setSub('cntPricesRevert', pr, pr === 1 ? 'variant row' : 'variant rows');
-  setSub('cntTagsRevert',   tr, tr === 1 ? 'product row' : 'product rows');
+  const setTagsSub = (id, products) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (products === 0) { el.textContent = 'Already up to date — nothing to upload'; return; }
+    el.textContent = `${products.toLocaleString()} product row${products === 1 ? '' : 's'}`;
+  };
+
+  setPriceSub('cntPricesSale',   ps, psP);
+  setTagsSub( 'cntTagsSale',     ts);
+  setPriceSub('cntPricesRevert', pr, prP);
+  setTagsSub( 'cntTagsRevert',   tr);
 }
 
 // =====================================================================
