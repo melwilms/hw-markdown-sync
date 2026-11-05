@@ -138,7 +138,14 @@ input[type=file] { display: none; }
 .notify-banner-list { margin-top: 8px; font-size: 12px; color: #92400e; line-height: 1.6; max-height: 140px; overflow-y: auto; }
 .notify-banner-list-item { padding: 2px 0; border-top: 1px solid rgba(120, 53, 15, 0.15); }
 .notify-banner-list-item:first-child { border-top: none; }
-.notify-banner-header { margin-bottom: 2px; }
+.notify-banner-header { margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.notify-banner-header-text { flex: 1; min-width: 200px; }
+
+/* Copy for Slack button */
+.notify-copy-btn { background: #78350f; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.15s; white-space: nowrap; font-family: inherit; }
+.notify-copy-btn:hover { background: #92400e; }
+.notify-copy-btn.copied { background: #065f46; }
+.notify-copy-btn.copied::before { content: '✓ '; }
 .notify-banner-sub { font-size: 11px; color: #92400e; margin-bottom: 10px; font-style: italic; }
 .notify-banner-rows { max-height: 320px; overflow-y: auto; margin-top: 8px; padding-right: 4px; }
 
@@ -155,6 +162,12 @@ input[type=file] { display: none; }
 .chan-chip.will-keep { background: #d1fae5; color: #065f46; border-color: #6ee7b7; text-decoration: none; }
 .chan-chip.will-keep:hover { background: #a7f3d0; }
 .chan-chip-icon { font-size: 10px; line-height: 1; font-family: -apple-system, sans-serif; }
+
+/* Per-product bulk toggle ("Keep all" / "Remove all") */
+.notify-row-toggle { font-size: 11px; font-weight: 600; color: #78350f; background: transparent; border: none; cursor: pointer; padding: 3px 8px; border-radius: 6px; margin-left: 2px; text-decoration: underline; text-decoration-color: rgba(120, 53, 15, 0.4); text-underline-offset: 2px; transition: all 0.15s; white-space: nowrap; }
+.notify-row-toggle:hover { background: rgba(120, 53, 15, 0.1); text-decoration-color: #78350f; }
+.notify-row-toggle.keep-all { color: #065f46; text-decoration-color: rgba(6, 95, 70, 0.4); }
+.notify-row-toggle.keep-all:hover { background: #d1fae5; text-decoration-color: #065f46; }
 
 /* Summary count in the headline */
 #channelStripHeadline { color: #78350f; font-weight: 500; }
@@ -387,8 +400,11 @@ table.results-table { width: 100%; border-collapse: collapse; font-size: 12px; }
       <span class="notify-banner-icon">📣</span>
       <div style="flex:1;">
         <div class="notify-banner-header">
-          <strong>Notify the Planning team:</strong>
-          <span id="channelStripHeadline"></span>
+          <div class="notify-banner-header-text">
+            <strong>Notify the Planning team:</strong>
+            <span id="channelStripHeadline"></span>
+          </div>
+          <button class="notify-copy-btn" id="copyPlanningMsg" onclick="copyPlanningMessage()">📋 Copy tag updates to share in Slack</button>
         </div>
         <div class="notify-banner-sub">Click any tag to keep it instead of removing it. Removed tags are also reflected in the Tags CSV export.</div>
         <div id="channelProductRows"></div>
@@ -1000,23 +1016,36 @@ function updateNordstromBanner() {
   }
   document.getElementById('channelStripHeadline').innerHTML = headline;
 
-  const html = `<div class="notify-banner-rows">` + productRows.map(row => `
-    <div class="notify-row">
-      <div class="notify-row-title">${esc(row.title)}</div>
-      <div class="notify-row-chips">
-        ${row.tags.map(t => {
-          const cls = t.isStripped ? 'will-strip' : 'will-keep';
-          const icon = t.isStripped ? '✕' : '✓';
-          const label = t.isStripped ? 'remove' : 'keep';
-          const keyAttr = esc(row.handle + '|' + t.tag);
-          return `<span class="chan-chip ${cls}" data-key="${keyAttr}" title="Click to ${t.isStripped ? 'keep' : 'remove'} this tag for this product"><span class="chan-chip-icon">${icon}</span>${esc(t.tag)}</span>`;
-        }).join('')}
-      </div>
-    </div>`).join('') + `</div>`;
+  const html = `<div class="notify-banner-rows">` + productRows.map(row => {
+    // If any tag on this product is set to strip, bulk button says "Keep all";
+    // if all are already kept, button says "Remove all" to let user revert quickly.
+    const anyStripping = row.tags.some(t => t.isStripped);
+    const toggleLabel = anyStripping ? 'Keep all' : 'Remove all';
+    const toggleCls = anyStripping ? 'keep-all' : '';
+    const toggleAction = anyStripping ? 'keep' : 'remove';
+    const handleAttr = esc(row.handle);
+    return `
+      <div class="notify-row">
+        <div class="notify-row-title">${esc(row.title)}</div>
+        <div class="notify-row-chips">
+          ${row.tags.map(t => {
+            const cls = t.isStripped ? 'will-strip' : 'will-keep';
+            const icon = t.isStripped ? '✕' : '✓';
+            const keyAttr = esc(row.handle + '|' + t.tag);
+            return `<span class="chan-chip ${cls}" data-key="${keyAttr}" title="Click to ${t.isStripped ? 'keep' : 'remove'} this tag for this product"><span class="chan-chip-icon">${icon}</span>${esc(t.tag)}</span>`;
+          }).join('')}
+          <button class="notify-row-toggle ${toggleCls}" data-handle="${handleAttr}" data-action="${toggleAction}">${toggleLabel}</button>
+        </div>
+      </div>`;
+  }).join('') + `</div>`;
   const container = document.getElementById('channelProductRows');
   container.innerHTML = html;
 
-  // Wire up click handlers to toggle opt-out and re-run audit in place
+  // Store product-to-tags lookup for bulk actions
+  const rowByHandle = {};
+  for (const r of productRows) rowByHandle[r.handle] = r.tags.map(t => t.tag);
+
+  // Individual chip toggles
   container.querySelectorAll('.chan-chip').forEach(el => {
     el.addEventListener('click', () => {
       const key = el.getAttribute('data-key');
@@ -1025,6 +1054,117 @@ function updateNordstromBanner() {
       runAudit({ noScroll: true });
     });
   });
+
+  // Bulk per-row toggles ("Keep all" / "Remove all")
+  container.querySelectorAll('.notify-row-toggle').forEach(el => {
+    el.addEventListener('click', () => {
+      const handle = el.getAttribute('data-handle');
+      const action = el.getAttribute('data-action');
+      const tags = rowByHandle[handle] || [];
+      for (const t of tags) {
+        const key = handle + '|' + t;
+        if (action === 'keep') rules.keptPrefixTags.add(key);
+        else                   rules.keptPrefixTags.delete(key);
+      }
+      runAudit({ noScroll: true });
+    });
+  });
+}
+
+// Build a Slack-formatted notification message based on current channel-tag changes
+// and copy to clipboard. Groups by PRODUCT (matches the banner UI) — each product
+// appears once with its removing/keeping channel tags on one line.
+function buildPlanningMessage() {
+  // Walk results and group channel tags by product
+  const rows = [];  // { title, removing: [tag], keeping: [tag] }
+  for (const r of results) {
+    if (!r.product || r.status === 'missing-s' || r.status === 'missing-m') continue;
+    const beforeTags = (r.product.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+    const channelTags = beforeTags.filter(t => t.startsWith('channel:'));
+    if (channelTags.length === 0) continue;
+    const title = r.shopifyTitle || r.masterTitle || r.product.title || r.product.handle;
+    const removing = [], keeping = [];
+    for (const t of channelTags.sort()) {
+      if (r.tagRemoved && r.tagRemoved.includes(t)) removing.push(t);
+      else keeping.push(t);
+    }
+    rows.push({ title, removing, keeping });
+  }
+  if (rows.length === 0) return '';
+
+  rows.sort((a, b) => a.title.localeCompare(b.title));
+
+  // Categorize each product into exactly one bucket so it appears only once
+  const removeOnly = rows.filter(r => r.removing.length > 0 && r.keeping.length === 0);
+  const keepOnly   = rows.filter(r => r.keeping.length > 0 && r.removing.length === 0);
+  const mixed      = rows.filter(r => r.removing.length > 0 && r.keeping.length > 0);
+
+  const tagList = ts => ts.map(t => `\`${t}\``).join(', ');
+
+  const lines = [];
+  lines.push('**Markdown update — channel tag changes** 📣');
+  lines.push('');
+  lines.push('The following products are going to markdown. Channel tag changes below for your awareness:');
+
+  // REMOVING only — primary notification
+  if (removeOnly.length) {
+    lines.push('');
+    lines.push(`🟥 **REMOVING channel tags from ${removeOnly.length} product${removeOnly.length === 1 ? '' : 's'}:**`);
+    lines.push('');
+    for (const row of removeOnly) {
+      lines.push(`• ${row.title} — ${tagList(row.removing)}`);
+    }
+  }
+
+  // KEEPING only — user opted out of every channel tag on this product
+  if (keepOnly.length) {
+    lines.push('');
+    lines.push(`🟩 **KEEPING channel tags on ${keepOnly.length} product${keepOnly.length === 1 ? '' : 's'} (opted out):**`);
+    lines.push('');
+    for (const row of keepOnly) {
+      lines.push(`• ${row.title} — ${tagList(row.keeping)}`);
+    }
+  }
+
+  // MIXED — some removed, some kept on the same product
+  if (mixed.length) {
+    lines.push('');
+    lines.push(`🟨 **MIXED — ${mixed.length} product${mixed.length === 1 ? '' : 's'} with both removes and keeps:**`);
+    lines.push('');
+    for (const row of mixed) {
+      lines.push(`• ${row.title} — Removing: ${tagList(row.removing)} · Keeping: ${tagList(row.keeping)}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function copyPlanningMessage() {
+  const msg = buildPlanningMessage();
+  if (!msg) return;
+  const btn = document.getElementById('copyPlanningMsg');
+  const restore = () => { if (btn) { btn.classList.remove('copied'); btn.textContent = '📋 Copy tag updates to share in Slack'; } };
+
+  // Modern clipboard API with fallback
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(msg).then(() => {
+      if (btn) { btn.classList.add('copied'); btn.textContent = 'Copied!'; setTimeout(restore, 2000); }
+    }).catch(() => {
+      fallbackCopy(msg, btn, restore);
+    });
+  } else {
+    fallbackCopy(msg, btn, restore);
+  }
+}
+function fallbackCopy(text, btn, restore) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed'; ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); if (btn) { btn.classList.add('copied'); btn.textContent = 'Copied!'; setTimeout(restore, 2000); } }
+  catch (e) { alert('Copy failed — select the message text manually.'); }
+  document.body.removeChild(ta);
 }
 
 function updateExportCounts() {
