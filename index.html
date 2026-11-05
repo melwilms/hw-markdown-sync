@@ -138,13 +138,27 @@ input[type=file] { display: none; }
 .notify-banner-list { margin-top: 8px; font-size: 12px; color: #92400e; line-height: 1.6; max-height: 140px; overflow-y: auto; }
 .notify-banner-list-item { padding: 2px 0; border-top: 1px solid rgba(120, 53, 15, 0.15); }
 .notify-banner-list-item:first-child { border-top: none; }
-.notify-banner-group { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(120, 53, 15, 0.2); }
-.notify-banner-group:first-of-type { border-top: none; }
-.notify-banner-group-header { font-weight: 600; font-size: 12px; color: #78350f; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
-.notify-banner-group-header code { background: rgba(120, 53, 15, 0.15); padding: 2px 8px; border-radius: 4px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; color: #78350f; }
-.notify-banner-group-count { font-weight: 500; color: #92400e; font-size: 11px; }
-.notify-banner-group-list { padding-left: 4px; font-size: 12px; color: #92400e; line-height: 1.6; max-height: 120px; overflow-y: auto; }
-.notify-banner-group-item { padding: 1px 0; }
+.notify-banner-header { margin-bottom: 2px; }
+.notify-banner-sub { font-size: 11px; color: #92400e; margin-bottom: 10px; font-style: italic; }
+.notify-banner-rows { max-height: 320px; overflow-y: auto; margin-top: 8px; padding-right: 4px; }
+
+/* Each product row: title on left, tag chips on right */
+.notify-row { display: flex; gap: 12px; align-items: flex-start; padding: 8px 10px; border-top: 1px solid rgba(120, 53, 15, 0.15); flex-wrap: wrap; }
+.notify-row:first-child { border-top: none; }
+.notify-row-title { font-weight: 600; font-size: 12px; color: #78350f; flex: 1 1 220px; min-width: 180px; line-height: 1.7; }
+.notify-row-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+
+/* Chip: default = "will strip" (filled amber), click toggles to "will keep" (outlined, strikethrough removed) */
+.chan-chip { display: inline-flex; align-items: center; gap: 5px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; padding: 3px 9px; border-radius: 12px; cursor: pointer; transition: all 0.15s; user-select: none; border: 1px solid transparent; }
+.chan-chip.will-strip { background: rgba(120, 53, 15, 0.18); color: #78350f; border-color: rgba(120, 53, 15, 0.25); }
+.chan-chip.will-strip:hover { background: rgba(120, 53, 15, 0.28); }
+.chan-chip.will-keep { background: #d1fae5; color: #065f46; border-color: #6ee7b7; text-decoration: none; }
+.chan-chip.will-keep:hover { background: #a7f3d0; }
+.chan-chip-icon { font-size: 10px; line-height: 1; font-family: -apple-system, sans-serif; }
+
+/* Summary count in the headline */
+#channelStripHeadline { color: #78350f; font-weight: 500; }
+#channelStripHeadline .kept-note { color: #065f46; font-weight: 500; margin-left: 6px; }
 
 /* Table */
 .table-meta { font-size: 11px; color: #aaa; margin-bottom: 8px; }
@@ -372,8 +386,12 @@ table.results-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     <div id="notifyPlanningBanner" class="notify-banner hidden">
       <span class="notify-banner-icon">📣</span>
       <div style="flex:1;">
-        <strong>Notify the Planning team:</strong> the following channel tags will be removed with this update.
-        <div id="channelTagGroups"></div>
+        <div class="notify-banner-header">
+          <strong>Notify the Planning team:</strong>
+          <span id="channelStripHeadline"></span>
+        </div>
+        <div class="notify-banner-sub">Click any tag to keep it instead of removing it. Removed tags are also reflected in the Tags CSV export.</div>
+        <div id="channelProductRows"></div>
       </div>
     </div>
 
@@ -419,6 +437,7 @@ let rules = {
   allProductTags: ['sale-section', 'bis-hidden'],
   autoStrip: ['bulk:tier-2', 'bulk:tier-3'],
   autoStripPrefixes: ['channel:'],  // any tag starting with these is auto-stripped (e.g. channel:nordstrom, channel:target, channel:amazon)
+  keptPrefixTags: new Set(),        // user opt-outs for prefix-matched tags: entries are "handle|tag" — strip skips these
   suggestedStripKnown: ['checkbox-eligible', 'seasonal-essentials', 'vacation-edit', 'event-shop', 'Q4 Drop 1', 'Q4 Drop 2', 'Q4 Drop 3', 'Q4 Drop 4', 'Q1 Drop 1', 'Q1 Drop 2', 'Q2 Drop 1', 'Q2 Drop 2', 'Q3 Drop 1', 'Q3 Drop 2'],
   suggestedStripChecked: new Set(),
   otherTagsChecked: new Set(),
@@ -765,7 +784,7 @@ function matchMasterToShopify(master, idx) {
 // =====================================================================
 // AUDIT + RULE APPLICATION
 // =====================================================================
-function runAudit() {
+function runAudit(opts = {}) {
   if (!masterData || !shopifyData) return;
   const idx = buildShopifyIndex();
   const seenShopifyTitles = new Set();
@@ -838,7 +857,17 @@ function runAudit() {
     ]);
 
     const stripPrefixes = rules.autoStripPrefixes || [];
-    const shouldStrip = t => stripSet.has(t) || stripPrefixes.some(p => t.startsWith(p));
+    const productHandle = match.product.handle || match.product.title || '';
+    const shouldStrip = t => {
+      if (stripSet.has(t)) return true;
+      const prefixHit = stripPrefixes.some(p => t.startsWith(p));
+      if (prefixHit) {
+        // Honor per-product opt-outs: if user checked "keep" for this product+tag, don't strip
+        if (rules.keptPrefixTags.has(productHandle + '|' + t)) return false;
+        return true;
+      }
+      return false;
+    };
     const afterTags = [...beforeTags.filter(t => !shouldStrip(t))];
     for (const t of addSet) { if (!afterTags.includes(t)) afterTags.push(t); }
 
@@ -914,49 +943,88 @@ function runAudit() {
   updateExportCounts();
   updateNordstromBanner();
   document.getElementById('resultsSection').classList.remove('hidden');
-  document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!opts.noScroll) {
+    document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
-// Show a callout if any products will have channel:* tags stripped, so the user
-// can notify the Planning team before pushing the update to Shopify. Groups by tag
-// so each channel gets its own product list.
+// Show a callout for products that have channel:* tags being removed, so the user
+// can (a) notify the Planning team, and (b) opt out of removing specific tags per product.
+// Groups by product (not by tag) so each product appears once with all its channel tags.
 function updateNordstromBanner() {
   const banner = document.getElementById('notifyPlanningBanner');
   if (!banner) return;
 
-  // Group affected products by which channel:* tag they had removed
-  const byTag = {};  // tag -> [productTitle]
+  // For each matched product, figure out which channel:* tags EXIST on it (regardless of
+  // whether they're currently being stripped — so the user can toggle any of them).
+  const productRows = [];  // { handle, title, tags: [{tag, isStripped}] }
   for (const r of results) {
     if (!r.product || r.status === 'missing-s' || r.status === 'missing-m') continue;
-    if (!r.tagRemoved || !r.tagRemoved.length) continue;
-    for (const t of r.tagRemoved) {
-      if (t.startsWith('channel:')) {
-        (byTag[t] = byTag[t] || []).push(r.shopifyTitle || r.masterTitle);
-      }
-    }
+    const beforeTags = (r.product.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+    const channelTags = beforeTags.filter(t => t.startsWith('channel:'));
+    if (channelTags.length === 0) continue;
+    const handle = r.product.handle || r.product.title || '';
+    const title = r.shopifyTitle || r.masterTitle || handle;
+    const tagStates = channelTags.map(t => ({
+      tag: t,
+      // "Stripped" = currently in tagRemoved (i.e., will be removed from Shopify)
+      isStripped: r.tagRemoved && r.tagRemoved.includes(t),
+    }));
+    productRows.push({ handle, title, tags: tagStates });
   }
 
-  const tagKeys = Object.keys(byTag).sort();
-  if (tagKeys.length === 0) {
+  if (productRows.length === 0) {
     banner.classList.add('hidden');
     return;
   }
   banner.classList.remove('hidden');
-  const html = tagKeys.map(tag => {
-    const products = byTag[tag].sort();
-    const count = products.length;
-    return `
-      <div class="notify-banner-group">
-        <div class="notify-banner-group-header">
-          <code>${esc(tag)}</code>
-          <span class="notify-banner-group-count">${count} product${count === 1 ? '' : 's'}</span>
-        </div>
-        <div class="notify-banner-group-list">
-          ${products.map(p => `<div class="notify-banner-group-item">• ${esc(p)}</div>`).join('')}
-        </div>
-      </div>`;
-  }).join('');
-  document.getElementById('channelTagGroups').innerHTML = html;
+
+  // Sort rows alphabetically by title for predictable display
+  productRows.sort((a, b) => a.title.localeCompare(b.title));
+
+  // Count totals for the headline
+  let totalStripped = 0, totalKept = 0;
+  const strippedProducts = new Set();
+  for (const row of productRows) {
+    for (const t of row.tags) {
+      if (t.isStripped) { totalStripped++; strippedProducts.add(row.handle); }
+      else totalKept++;
+    }
+  }
+  const productCount = strippedProducts.size;
+  let headline = productCount > 0
+    ? `channel tags will be removed from <strong>${productCount}</strong> product${productCount === 1 ? '' : 's'}`
+    : `no channel tags will be removed`;
+  if (totalKept > 0) {
+    headline += `<span class="kept-note">(${totalKept} tag${totalKept === 1 ? '' : 's'} kept by you)</span>`;
+  }
+  document.getElementById('channelStripHeadline').innerHTML = headline;
+
+  const html = `<div class="notify-banner-rows">` + productRows.map(row => `
+    <div class="notify-row">
+      <div class="notify-row-title">${esc(row.title)}</div>
+      <div class="notify-row-chips">
+        ${row.tags.map(t => {
+          const cls = t.isStripped ? 'will-strip' : 'will-keep';
+          const icon = t.isStripped ? '✕' : '✓';
+          const label = t.isStripped ? 'remove' : 'keep';
+          const keyAttr = esc(row.handle + '|' + t.tag);
+          return `<span class="chan-chip ${cls}" data-key="${keyAttr}" title="Click to ${t.isStripped ? 'keep' : 'remove'} this tag for this product"><span class="chan-chip-icon">${icon}</span>${esc(t.tag)}</span>`;
+        }).join('')}
+      </div>
+    </div>`).join('') + `</div>`;
+  const container = document.getElementById('channelProductRows');
+  container.innerHTML = html;
+
+  // Wire up click handlers to toggle opt-out and re-run audit in place
+  container.querySelectorAll('.chan-chip').forEach(el => {
+    el.addEventListener('click', () => {
+      const key = el.getAttribute('data-key');
+      if (rules.keptPrefixTags.has(key)) rules.keptPrefixTags.delete(key);
+      else rules.keptPrefixTags.add(key);
+      runAudit({ noScroll: true });
+    });
+  });
 }
 
 function updateExportCounts() {
